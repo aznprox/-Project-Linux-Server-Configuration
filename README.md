@@ -3,6 +3,11 @@ _Configuring a Linux server to host a web app securely._
 
 # Server details
 
+IP address: 52.23.186.77
+
+SSH port: 2200
+
+Passphrase for Key: student
 
 
 ## Check and update all currently installed packages
@@ -41,8 +46,9 @@ $ mkdir .ssh
 $ touch .ssh/authorized_keys
 $ nano .ssh/authorized_keys
 ```
-
-I pasted the ssh key in the authorized key into the authorized_keys file.
+I genereated a paried ssh key file on my local machine with `ssh-keygen`
+I pasted the ssh key from my public key file key into the authorized_keys file on my AWS linux server.
+I then changed the access permission on this file by typing:
 
 ```
 chmod 700 .shh
@@ -57,19 +63,25 @@ password:student
 ```
 
 ##Change SSH port from 22 to 2200
-Switch to root user by typing:
+We're going to configure our firewall to only allow SSH from port 2200 instead of 22. We're also going to allow https through port 80.
+
 ```
-sudo su -
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow ssh
+ufw allow 2200/tcp
+ufw allow www
 ```
 
-Edit the file `/etc/ssh/sshd_config` and add `Port 2200` under `Port 22`
+Then we'll turn on our firewall with:
 
-by typing:
 ```
-nano /etc/ssh/sshd_config
+ufw enable
 ```
-while we are at it let's disable root login
 
+But we also have to disable through AWS dashboard
+
+![firewall](https://i.imgur.com/drGwo5v.png)
 
 Then restart the SSH service:
 
@@ -77,11 +89,8 @@ Then restart the SSH service:
 
 Will now need to use the following command to login to the server:
 
-`$ ssh grader@34.203.190.7 -p 2200 -i [privateKeyFileName]`
+`$ ssh grader@grader@52.23.186.77  -p 2200 -i [privateKeyFileName]`
 
-## Change timezone to UTC
-change the time zone to UTC by typing:
-`sudo timedatectl set-timezone UTC`
 
 ## Install Apache to serve a Python mod_wsgi application
 Install Apache:
@@ -97,18 +106,99 @@ Install PostgreSQL with:
 
 `sudo apt-get install postgresql postgresql-contrib`
 
-To ensure that remote connections to PostgreSQL are not allowed, I checked
-that the configuration file `/etc/postgresql/9.3/main/pg_hba.conf` only
-allowed connections from the local host addresses `127.0.0.1` for IPv4
-and `::1` for IPv6.
+In order for make to make changes to the database as the psql user catalog I had to make some changes to a file 
+`/etc/postgresql/9.5/main/pg_hba.conf`
+
+from
+
+```
+# TYPE DATABASE USER ADDRESS METHOD
+local  all      all          peer
+```
+to
+```
+# TYPE DATABASE USER ADDRESS METHOD
+local  all      all          md5
+```
 
 Create a PostgreSQL user called `catalog` with:
 
 `sudo -u postgres createuser -P catalog`
 
-You are prompted for a password. This creates a normal user that can't create
-databases, roles (users).
-
 Create an empty database called `catalog` with:
 
 `sudo -u postgres createdb -O catalog catalog`
+
+Set a password for user catalog with:
+
+`postgres=# ALTER ROLE catalog WITH PASSWORD 'password';`
+
+Give user "catalog" permission to "catalog" application database
+
+`postgres=# GRANT ALL PRIVILEGES ON DATABASE catalog TO catalog;`
+
+Press ctrl^d to exit out of psql and then one more time to exit out of user postgres
+
+## Installing git, clone and setup your Catalog App project.
+1. Install Git using `sudo apt-get install git`
+2. Use `cd /var/www` to move to the /var/www directory 
+3. Create the application directory `sudo mkdir FlaskApp`
+4. Move inside this directory using `cd FlaskApp`
+5. Clone the Catalog App to the virtual machine `sudo git clone https://github.com/aznprox/catalog_project_for_aws`
+6. Rename the project's name `sudo mv ./catalog_project_for_aws ./FlaskApp`
+7. Move to the inner FlaskApp directory using `cd FlaskApp`
+8. Install pip `sudo apt-get install python-pip`
+9. Use pip to install dependencies `sudo pip install -r requirements.txt`
+10. Populate our database with `python lotsofcars.py`
+
+## Configure and Enable a New Virtual Host
+1. Create FlaskApp.conf to edit: `sudo nano /etc/apache2/sites-available/FlaskApp.conf`
+2. Add the following lines of code to the file to configure the virtual host. 
+	
+	```
+	<VirtualHost *:80>
+		ServerName 52.23.186.77
+        ServerAlias 52.23.186.77.*.xip.io
+		ServerAdmin contact@talyhuang.com
+		WSGIScriptAlias / /var/www/FlaskApp/flaskapp.wsgi
+		<Directory /var/www/FlaskApp/FlaskApp/>
+			Order allow,deny
+			Allow from all
+		</Directory>
+		Alias /static /var/www/FlaskApp/FlaskApp/static
+		<Directory /var/www/FlaskApp/FlaskApp/static/>
+			Order allow,deny
+			Allow from all
+		</Directory>
+		ErrorLog ${APACHE_LOG_DIR}/error.log
+		LogLevel warn
+		CustomLog ${APACHE_LOG_DIR}/access.log combined
+	</VirtualHost>
+	```
+3. Enable the virtual host with the following command: `sudo a2ensite FlaskApp`
+
+## Create the .wsgi File
+1. Create the .wsgi File under /var/www/FlaskApp: 
+	
+	```
+	cd /var/www/FlaskApp
+	sudo nano flaskapp.wsgi 
+	```
+2. Add the following lines of code to the flaskapp.wsgi file:
+	
+	```
+	#!/usr/bin/python
+	import sys
+	import logging
+	logging.basicConfig(stream=sys.stderr)
+	sys.path.insert(0,"/var/www/FlaskApp/")
+
+	from FlaskApp import app as application
+	application.secret_key = 'Add your secret key'
+	```
+
+## Restart Apache
+1. Restart Apache `sudo service apache2 restart `
+
+## References:
+https://www.digitalocean.com/community/tutorials/how-to-deploy-a-flask-application-on-an-ubuntu-vps
