@@ -1,4 +1,4 @@
-# Project 5 of the Udacity Full Stack Nanodegree programme
+# Project 5 of the Udacity Full Stack Nanodegree program
 _Configuring a Linux server to host a web app securely._
 
 # Server details
