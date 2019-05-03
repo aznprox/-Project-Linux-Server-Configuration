@@ -62,6 +62,32 @@ ssh grader@34.203.190.7 -i [privateKeyFileName]
 password:student
 ```
 
+##Change Disabling root login remotely
+To do this we're going to switch to root user:
+```
+sudo su root
+```
+
+Then we're going to configure the /etc/ssh/sshd_config
+```
+# Authentication:
+LoginGraceTime 120
+PermitRootLogin without-password
+StrictModes yes
+```
+
+Set `PermitRootLogin no`
+
+while we're here let's take out Port 22 for the next step below.
+
+```
+# What ports, IPs and protocols we listen for
+Port 22
+Port 2200
+```
+
+We'll just remove the line that says `Port 22`
+
 ##Change SSH port from 22 to 2200
 We're going to configure our firewall to only allow SSH from port 2200 instead of 22. We're also going to allow https through port 80.
 
